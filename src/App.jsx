@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sprout, Search, Plus, House, Compass, Users, UserRound, Sun, Moon,
   Heart, HandHeart, MessageCircle, Bookmark, Flag, ShieldCheck, LockKeyhole,
   Globe2, ChevronDown, X, Send, SlidersHorizontal, Leaf, LogIn, LogOut,
-  Check, Settings2, AlertTriangle
+  Check, Settings2, AlertTriangle, ImagePlus, Camera, Trash2, ArrowLeft
 } from 'lucide-react';
 import { supabase, cloudEnabled } from './supabase';
 
@@ -32,14 +32,22 @@ const timeAgo = (date) => {
   return `${Math.floor(mins/1440)}d ago`;
 };
 const initials = name => (name || 'w').slice(0,1).toUpperCase();
+const countReactions = p => Object.values(p.reactions||{}).reduce((a,b)=>a+b,0);
 
 function App() {
   const [theme,setTheme] = useState(() => read('whisper-theme','light'));
   const [tab,setTab] = useState('Home');
   const [posts,setPosts] = useState(() => read('whisper-posts',seedPosts));
+  const [comments,setComments] = useState([]);
+  const [likes,setLikes] = useState([]);
+  const [viewingProfile,setViewingProfile] = useState(null);
+  const [coverUploading,setCoverUploading] = useState(false);
+  const [avatarUploading,setAvatarUploading] = useState(false);
+  const coverFileRef = useRef(null);
+  const avatarFileRef = useRef(null);
   const [joined,setJoined] = useState(() => read('whisper-joined',['Late Night Thoughts','Friendship']));
   const [settings,setSettings] = useState(() => read('whisper-settings',initialSettings));
-  const [profile,setProfile] = useState(() => read('whisper-profile',{handle:'softfern',bio:'Learning to be kinder to myself.', avatar:'🌿'}));
+  const [profile,setProfile] = useState(() => read('whisper-profile',{handle:'softfern',bio:'Learning to be kinder to myself.', avatar:'🌿', avatar_url:null, cover_photo_url:null, user_id:null}));
   const [query,setQuery] = useState('');
   const [topic,setTopic] = useState('All topics');
   const [sort,setSort] = useState('Latest');
@@ -63,7 +71,7 @@ function App() {
   const [authLoading,setAuthLoading] = useState(false);
 
   useEffect(()=>{ localStorage.setItem('whisper-theme',JSON.stringify(theme)); },[theme]);
-  useEffect(()=>{ localStorage.setItem('whisper-posts',JSON.stringify(posts)); },[posts]);
+  useEffect(()=>{ if(!cloudEnabled) localStorage.setItem('whisper-posts',JSON.stringify(posts)); },[posts]);
   useEffect(()=>{ localStorage.setItem('whisper-joined',JSON.stringify(joined)); },[joined]);
   useEffect(()=>{ localStorage.setItem('whisper-settings',JSON.stringify(settings)); },[settings]);
   useEffect(()=>{ localStorage.setItem('whisper-profile',JSON.stringify(profile)); },[profile]);
@@ -73,6 +81,59 @@ function App() {
     const {data:{subscription}} = supabase.auth.onAuthStateChange((_event,s)=>setSession(s));
     return ()=>subscription.unsubscribe();
   },[]);
+
+  const loadCloudData = async () => {
+    if (!cloudEnabled || !session?.user?.id) return;
+    const [postResult, commentResult, likeResult] = await Promise.all([
+      supabase.from('confessions').select('*').order('created_at',{ascending:false}),
+      supabase.from('comments').select('*').order('created_at',{ascending:true}),
+      supabase.from('post_likes').select('post_id,user_id')
+    ]);
+    if (postResult.error) { notify(postResult.error.message || 'Could not load posts.'); return; }
+    if (commentResult.error) { notify('Could not load comments: ' + commentResult.error.message); return; }
+    if (likeResult.error) { notify('Could not load likes: ' + likeResult.error.message); return; }
+    const commentRows = commentResult.data || [];
+    const likeRows = likeResult.data || [];
+    setComments(commentRows);
+    setLikes(likeRows);
+    setPosts((postResult.data || []).map(row => ({
+      ...row,
+      author_id: row.author_id,
+      author: row.author || 'whisper_member',
+      avatar_url: row.avatar_url || null,
+      reactions: row.reactions || {},
+      comments: commentRows.filter(c => c.post_id === row.id),
+      likeCount: likeRows.filter(l => l.post_id === row.id).length,
+      likedByMe: likeRows.some(l => l.post_id === row.id && l.user_id === session.user.id)
+    })));
+  };
+
+  useEffect(()=>{
+    if (!cloudEnabled) return;
+    if (!session?.user?.id) { setPosts([]); setComments([]); setLikes([]); return; }
+    let active = true;
+    const loadProfile = async () => {
+      const {data,error} = await supabase.from('profiles').select('*').eq('id',session.user.id).maybeSingle();
+      if (!active) return;
+      if (error) { notify('Could not load profile: ' + error.message); return; }
+      if (data) {
+        setProfile(p=>({...p,user_id:data.id,handle:data.handle || p.handle,bio:data.bio || '',avatar_url:data.avatar_url || null,cover_photo_url:data.cover_photo_url || null}));
+        setSettings(s=>({...s,privateAccount:!!data.is_private}));
+      } else {
+        const initial = {id:session.user.id,handle:profile.handle,bio:profile.bio,is_private:false,avatar_url:profile.avatar_url || null,cover_photo_url:profile.cover_photo_url || null};
+        const {error:insertError} = await supabase.from('profiles').upsert(initial,{onConflict:'id'});
+        if (insertError && active) notify('Could not initialize profile: ' + insertError.message);
+      }
+      await loadCloudData();
+    };
+    loadProfile();
+    const channel = supabase.channel('whisper-live-data')
+      .on('postgres_changes',{event:'*',schema:'public',table:'confessions'},()=>loadCloudData())
+      .on('postgres_changes',{event:'*',schema:'public',table:'comments'},()=>loadCloudData())
+      .on('postgres_changes',{event:'*',schema:'public',table:'post_likes'},()=>loadCloudData())
+      .subscribe();
+    return ()=>{active=false;supabase.removeChannel(channel);};
+  },[session?.user?.id]);
   useEffect(()=>{
     if (!toast) return;
     const id=setTimeout(()=>setToast(''),2800);
@@ -83,36 +144,113 @@ function App() {
     let result=posts.filter(p => {
       const topicMatch=topic==='All topics'||p.topic===topic;
       const searchMatch=!query||`${p.body} ${p.topic} ${p.author}`.toLowerCase().includes(query.toLowerCase());
-      const visibilityMatch=p.visibility==='public'||p.author===profile.handle;
+      const visibilityMatch=p.visibility==='public'||(session?.user?.id ? p.author_id===session.user.id : (!cloudEnabled && p.author===profile.handle));
       return topicMatch&&searchMatch&&visibilityMatch;
     });
-    if (sort==='Most loved') result.sort((a,b)=>totalReactions(b)-totalReactions(a));
+    if (sort==='Most loved') result.sort((a,b)=>(b.likeCount ?? totalReactions(b))-(a.likeCount ?? totalReactions(a)));
     else if (sort==='Most discussed') result.sort((a,b)=>(b.comments?.length||0)-(a.comments?.length||0));
     else result.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     return result;
-  },[posts,topic,query,sort,profile.handle]);
+  },[posts,topic,query,sort,profile.handle,session?.user?.id]);
   function totalReactions(p){ return Object.values(p.reactions||{}).reduce((a,b)=>a+b,0); }
   const notify = msg => setToast(msg);
   const requireAccount = action => {
     if (!cloudEnabled && !session) { notify(`Demo mode: ${action} is saved only in this browser.`); return false; }
     return true;
   };
-  const reactTo = (id,emoji) => {
-    setPosts(prev=>prev.map(p=>p.id!==id?p:{...p,reactions:{...p.reactions,[emoji]:(p.reactions?.[emoji]||0)+1}}));
+  const reactTo = async (id) => {
+    if (cloudEnabled) {
+      if (!session?.user?.id) { setAuthMode('signin'); setAuthOpen(true); notify('Sign in to like a post.'); return; }
+      const alreadyLiked = likes.some(l => l.post_id === id && l.user_id === session.user.id);
+      if (alreadyLiked) {
+        const {error} = await supabase.from('post_likes').delete().eq('post_id',id).eq('user_id',session.user.id);
+        if (error) { notify(error.message); return; }
+      } else {
+        const {error} = await supabase.from('post_likes').insert({post_id:id,user_id:session.user.id});
+        if (error && error.code !== '23505') { notify(error.message); return; }
+      }
+      await loadCloudData();
+      return;
+    }
+    const demoKey='whisper-demo-liked-'+profile.handle;
+    const current=read(demoKey,[]);
+    const next=current.includes(id)?current.filter(x=>x!==id):[...current,id];
+    localStorage.setItem(demoKey,JSON.stringify(next));
+    setPosts(prev=>prev.map(p=>p.id!==id?p:{...p,likedByMe:next.includes(id),likeCount:Math.max(0,(p.likeCount||totalReactions(p))+(next.includes(id)?1:-1))}));
   };
-  const addComment = id => {
+
+  const addComment = async (id) => {
     const body=commentDraft.trim();
     if(!body) return;
-    setPosts(prev=>prev.map(p=>p.id!==id?p:{...p,comments:[...(p.comments||[]),{id:crypto.randomUUID(),author:settings.anonymousReplies?profile.handle:'community_member',body}]}));
-    setCommentDraft(''); setCommentOpen(null); notify('Reply added');
+    if (cloudEnabled) {
+      if (!session?.user?.id) { setAuthMode('signin'); setAuthOpen(true); notify('Sign in to comment.'); return; }
+      const {data,error} = await supabase.from('comments').insert({
+        post_id:id, author_id:session.user.id, author_handle:profile.handle,
+        avatar_url:profile.avatar_url || null, body
+      }).select('*').single();
+      if (error) { notify('Could not add comment: ' + error.message); return; }
+      setComments(prev=>[...prev,data]);
+      setPosts(prev=>prev.map(p=>p.id!==id?p:{...p,comments:[...(p.comments||[]),data]}));
+    } else {
+      const newComment={id:crypto.randomUUID(),post_id:id,author_id:null,author_handle:profile.handle,author:profile.handle,avatar_url:profile.avatar_url||null,body,created_at:new Date().toISOString()};
+      setPosts(prev=>prev.map(p=>p.id!==id?p:{...p,comments:[...(p.comments||[]),newComment]}));
+    }
+    setCommentDraft(''); notify('Reply added');
   };
-  const createPost = () => {
+
+  const createPost = async () => {
     const body=draft.trim();
     if(body.length<8){notify('Add a little more to your confession first.');return;}
     if(body.length>1000){notify('Please keep confessions under 1,000 characters.');return;}
-    const newPost={id:crypto.randomUUID(),author:profile.handle,topic:draftTopic,body,visibility:draftVisibility,created_at:new Date().toISOString(),reactions:{},comments:[]};
-    setPosts(prev=>[newPost,...prev]);setDraft('');setShowComposer(false);setTab('Home');setTopic('All topics');notify('Your confession is posted.');
+    if (cloudEnabled) {
+      if (!session?.user?.id) { setAuthMode('signin'); setAuthOpen(true); notify('Sign in to publish across devices.'); return; }
+      const row={author_id:session.user.id,author:profile.handle,avatar_url:profile.avatar_url||null,topic:draftTopic,body,visibility:draftVisibility,reactions:{},comments:[]};
+      const {data,error}=await supabase.from('confessions').insert(row).select('*').single();
+      if(error){notify('Could not post confession: '+error.message);return;}
+      setPosts(prev=>[{...data,comments:[],likeCount:0,likedByMe:false},...prev]);
+    } else {
+      const newPost={id:crypto.randomUUID(),author:profile.handle,author_id:null,avatar_url:profile.avatar_url||null,topic:draftTopic,body,visibility:draftVisibility,created_at:new Date().toISOString(),reactions:{},comments:[],likeCount:0,likedByMe:false};
+      setPosts(prev=>[newPost,...prev]);
+    }
+    setDraft('');setShowComposer(false);setTab('Home');setTopic('All topics');notify('Your confession is posted.');
   };
+
+  const openPublicProfile = async (authorId, handle) => {
+    if (session?.user?.id && authorId === session.user.id) { setTab('My profile'); return; }
+    if (!cloudEnabled || !authorId) { notify('This profile is not available in demo mode yet.'); return; }
+    const {data,error}=await supabase.from('profiles').select('*').eq('id',authorId).maybeSingle();
+    if(error){notify('Could not open profile: '+error.message);return;}
+    if(!data){notify('This user has not created a public profile yet.');return;}
+    setViewingProfile(data); setTab('Public profile');
+  };
+
+  const uploadProfileImage = async (file, kind) => {
+    if(!file) return;
+    if(!session?.user?.id){setAuthMode('signin');setAuthOpen(true);notify('Sign in to upload profile photos.');return;}
+    if(!file.type.startsWith('image/')){notify('Choose an image file.');return;}
+    if(file.size>5*1024*1024){notify('Please choose an image under 5 MB.');return;}
+    const setUploading=kind==='cover'?setCoverUploading:setAvatarUploading;
+    setUploading(true);
+    try {
+      const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
+      const path=`${session.user.id}/${kind}-${Date.now()}.${ext}`;
+      const {error:uploadError}=await supabase.storage.from('Profile-Photo').upload(path,file,{upsert:true,contentType:file.type});
+      if(uploadError) throw uploadError;
+      const {data:urlData}=supabase.storage.from('Profile-Photo').getPublicUrl(path);
+      const field=kind==='cover'?'cover_photo_url':'avatar_url';
+      const updated={...profile,user_id:session.user.id,[field]:urlData.publicUrl};
+      const {error:saveError}=await supabase.from('profiles').upsert({id:session.user.id,handle:updated.handle,bio:updated.bio,is_private:settings.privateAccount,avatar_url:updated.avatar_url||null,cover_photo_url:updated.cover_photo_url||null},{onConflict:'id'});
+      if(saveError) throw saveError;
+      if(kind==='avatar'){
+        const {error:postError}=await supabase.from('confessions').update({avatar_url:urlData.publicUrl}).eq('author_id',session.user.id);
+        const {error:commentError}=await supabase.from('comments').update({avatar_url:urlData.publicUrl}).eq('author_id',session.user.id);
+        if(postError || commentError) notify('Photo saved, but older posts or comments may still show the previous photo.');
+      }
+      setProfile(updated); notify(kind==='cover'?'Cover photo updated!':'Profile photo updated!');
+    } catch(err){notify('Photo upload failed: '+(err.message||'Check storage bucket permissions.'));}
+    finally{setUploading(false);}
+  };
+
   const toggleJoin = name => setJoined(prev=>prev.includes(name)?prev.filter(n=>n!==name):[...prev,name]);
   const sendReport = () => {
     if (!reportTarget) return;
@@ -135,10 +273,29 @@ function App() {
     } catch(err){notify(err.message||'Could not sign in.');}
     finally{setAuthLoading(false);}
   };
-  const signOut = async()=>{if(cloudEnabled) await supabase.auth.signOut();setSession(null);notify('Signed out');};
-  const saveProfile = ()=>{const handle=editHandle.trim().replace(/^@/,'').replace(/[^a-zA-Z0-9_]/g,'').slice(0,22)||'softfern';setProfile(p=>({...p,handle,bio:editBio.trim().slice(0,120)}));setProfileEdit(false);notify('Profile updated');};
+  const signOut = async()=>{if(cloudEnabled) await supabase.auth.signOut();setSession(null);if(cloudEnabled){setPosts(prev=>prev.filter(p=>p.visibility==='public'));setComments([]);setLikes([]);}notify('Signed out');};
+  const saveProfile = async()=>{
+    const handle=editHandle.trim().replace(/^@/,'').replace(/[^a-zA-Z0-9_]/g,'').slice(0,22)||'softfern';
+    const updated={...profile,handle,bio:editBio.trim().slice(0,120),user_id:session?.user?.id||profile.user_id};
+    if(cloudEnabled && session?.user?.id){
+      const {error}=await supabase.from('profiles').upsert({id:session.user.id,handle:updated.handle,bio:updated.bio,is_private:settings.privateAccount,avatar_url:updated.avatar_url||null,cover_photo_url:updated.cover_photo_url||null},{onConflict:'id'});
+      if(error){notify('Could not save profile: '+error.message);return;}
+      const {error:postError}=await supabase.from('confessions').update({author:updated.handle,avatar_url:updated.avatar_url||null}).eq('author_id',session.user.id);
+      const {error:commentError}=await supabase.from('comments').update({author_handle:updated.handle,avatar_url:updated.avatar_url||null}).eq('author_id',session.user.id);
+      if(postError || commentError) notify('Profile saved, but some older posts or comments could not be refreshed.');
+    }
+    setProfile(updated);setProfileEdit(false);notify('Profile updated');
+  };
 
   return <div className={`app ${theme}`} data-theme={theme}>
+    <style>{`
+      .profile-link-button,.profile-name-link{cursor:pointer;border:0;background:none;color:inherit;font:inherit;padding:0;text-align:left}
+      .profile-name-link{font-weight:750}.profile-name-link:hover{text-decoration:underline}
+      .post-avatar img,.comment-avatar img,.profile-avatar-large img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+      .post-avatar,.comment-avatar{overflow:hidden;flex-shrink:0}.post-avatar{border:0;display:grid;place-items:center}.comment-avatar{display:grid;place-items:center}
+      .like-button{display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;cursor:pointer;padding:7px 9px;border-radius:10px;color:var(--text,#40354b)}.like-button.liked{color:#e54868;background:rgba(229,72,104,.09)}
+      .comment-row{display:flex;gap:10px;align-items:flex-start;margin:10px 0}.comment-copy{min-width:0;flex:1}.comment-copy p{margin:4px 0;overflow-wrap:anywhere}.profile-cover-photo{position:relative;background-size:cover;background-position:center;min-height:180px;border-radius:18px 18px 0 0;overflow:hidden}.cover-edit-button{position:absolute;right:14px;bottom:14px;display:flex;align-items:center;gap:7px;border:1px solid rgba(255,255,255,.5);border-radius:10px;background:rgba(25,20,35,.72);color:white;padding:9px 12px;cursor:pointer}.profile-avatar-photo{overflow:hidden;display:grid;place-items:center}.profile-avatar-photo img{border-radius:inherit}.profile-photo-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 18px}.profile-photo-actions small{max-width:360px}.public-profile-page>.button-secondary{margin-bottom:16px}.profile-heading-row{gap:16px}
+    `}</style>
     <aside className="sidebar">
       <button className="brand" onClick={()=>{setTab('Home');setTopic('All topics')}}><span className="brand-mark"><Sprout size={23}/></span><span>whisper<span className="brand-dot">.</span><small>YOUR QUIET CORNER</small></span></button>
       <button className="compose-side" onClick={()=>setShowComposer(true)}><Plus size={18}/> Write a confession</button>
@@ -183,10 +340,11 @@ function App() {
       </header>
 
       <div className="content">
-        {tab==='Home'&&<HomePage {...{profile,settings,setShowComposer,topic,setTopic,sort,setSort,visiblePosts,reactTo,commentOpen,setCommentOpen,commentDraft,setCommentDraft,addComment,setReportTarget,joined,theme,notify}}/>}
-        {tab==='Explore'&&<ExplorePage {...{query,setQuery,setTab,setTopic,joined,visiblePosts,reactTo,setShowComposer}}/>}
+        {tab==='Home'&&<HomePage {...{profile,settings,setShowComposer,topic,setTopic,sort,setSort,visiblePosts,reactTo,commentOpen,setCommentOpen,commentDraft,setCommentDraft,addComment,setReportTarget,joined,theme,notify,openPublicProfile,session}}/>}
+        {tab==='Explore'&&<ExplorePage {...{query,setQuery,setTab,setTopic,joined,visiblePosts,reactTo,setShowComposer,openPublicProfile}}/>}
         {tab==='Communities'&&<CommunitiesPage {...{joined,toggleJoin,setTab,setTopic,notify}}/>}
-        {tab==='My profile'&&<ProfilePage {...{profile,setProfile,settings,setSettings,posts,profileEdit,setProfileEdit,editHandle,setEditHandle,editBio,setEditBio,saveProfile,session,signOut,setAuthOpen,setAuthMode,notify}}/>}
+        {tab==='My profile'&&<ProfilePage {...{profile,setProfile,settings,setSettings,posts,profileEdit,setProfileEdit,editHandle,setEditHandle,editBio,setEditBio,saveProfile,session,signOut,setAuthOpen,setAuthMode,notify,coverFileRef,avatarFileRef,uploadProfileImage,coverUploading,avatarUploading}}/>}
+        {tab==='Public profile'&&viewingProfile&&<PublicProfilePage user={viewingProfile} posts={posts} onBack={()=>setTab('Home')} openPublicProfile={openPublicProfile}/>}
       </div>
       <footer className="footer"><span>whisper<span className="brand-dot">.</span> <span>Make room for every feeling.</span></span><span><ShieldCheck size={13}/> Anonymous by design, kind by choice.</span></footer>
     </main>
@@ -210,13 +368,13 @@ function App() {
   </div>;
 }
 
-function HomePage({profile,settings,setShowComposer,topic,setTopic,sort,setSort,visiblePosts,reactTo,commentOpen,setCommentOpen,commentDraft,setCommentDraft,addComment,setReportTarget,joined,theme,notify}){
+function HomePage({profile,settings,setShowComposer,topic,setTopic,sort,setSort,visiblePosts,reactTo,commentOpen,setCommentOpen,commentDraft,setCommentDraft,addComment,setReportTarget,joined,theme,notify,openPublicProfile,session}){
   return <div className="home-layout">
     <section className="feed-column">
       <div className="welcome-row"><div><span className="eyebrow">TUESDAY, OCTOBER 20</span><h1>A softer place<br/><em>to land.</em></h1><p>Whatever you’re carrying today, you don’t have to carry it alone.</p></div><div className="welcome-art"><div className="art-orbit orbit-one"/><div className="art-orbit orbit-two"/><div className="art-leaf"><Sprout size={58}/></div><span className="art-spark spark-one">✳</span><span className="art-spark spark-two">✧</span></div></div>
       <button className="composer-prompt" onClick={()=>setShowComposer(true)}><span className="prompt-avatar">{profile.avatar}</span><span className="prompt-copy">What’s on your mind, @{profile.handle}?</span><span className="prompt-cta"><Plus size={16}/> Confess</span></button>
       <div className="feed-toolbar"><div className="feed-title"><h2>Community whispers</h2><span className="live-dot"/></div><div className="feed-controls"><select aria-label="Filter by topic" value={topic} onChange={e=>setTopic(e.target.value)}>{TOPICS.map(t=><option key={t}>{t}</option>)}</select><select aria-label="Sort posts" value={sort} onChange={e=>setSort(e.target.value)}><option>Latest</option><option>Most loved</option><option>Most discussed</option></select><button className="filter-button" title="Filter options" onClick={()=>notify('Choose a topic and sort order using the menus.')}><SlidersHorizontal size={16}/></button></div></div>
-      {visiblePosts.length===0?<div className="empty-state"><Sprout size={32}/><h3>No whispers found</h3><p>Try another search or be the first to share something here.</p><button className="button-primary" onClick={()=>setShowComposer(true)}>Write a confession</button></div>:<div className="post-list">{visiblePosts.map(post=><PostCard key={post.id} post={post} reactTo={reactTo} commentOpen={commentOpen} setCommentOpen={setCommentOpen} commentDraft={commentDraft} setCommentDraft={setCommentDraft} addComment={addComment} setReportTarget={setReportTarget}/>)}</div>}
+      {visiblePosts.length===0?<div className="empty-state"><Sprout size={32}/><h3>No whispers found</h3><p>Try another search or be the first to share something here.</p><button className="button-primary" onClick={()=>setShowComposer(true)}>Write a confession</button></div>:<div className="post-list">{visiblePosts.map(post=><PostCard key={post.id} post={post} reactTo={reactTo} commentOpen={commentOpen} setCommentOpen={setCommentOpen} commentDraft={commentDraft} setCommentDraft={setCommentDraft} addComment={addComment} setReportTarget={setReportTarget} openPublicProfile={openPublicProfile} session={session}/>)}</div>}
       <div className="feed-end"><span/><p>You’re all caught up for now.</p><span/></div>
     </section>
     <aside className="right-rail">
@@ -228,15 +386,42 @@ function HomePage({profile,settings,setShowComposer,topic,setTopic,sort,setSort,
   </div>;
 }
 
-function PostCard({post,reactTo,commentOpen,setCommentOpen,commentDraft,setCommentDraft,addComment,setReportTarget}){
+function PostCard({post,reactTo,commentOpen,setCommentOpen,commentDraft,setCommentDraft,addComment,setReportTarget,openPublicProfile,session}){
   const [expanded,setExpanded]=useState(false);
-  return <article className="post-card"><div className="post-top"><div className="post-avatar">{['🌿','🌱','🍃','☘️','🪴'][post.author.length%5]}</div><div className="post-byline"><b>@{post.author}</b><span>{post.topic} <i/> {timeAgo(post.created_at)}</span></div><button className="post-more" aria-label="Report post" onClick={()=>setReportTarget(post)}><Flag size={16}/></button></div><p className="post-body">{post.body}</p><div className="post-tags"><span className="topic-pill"><span/> {post.topic}</span>{post.visibility==='private'&&<span className="private-pill"><LockKeyhole size={12}/> Private</span>}</div><div className="post-actions"><div className="reaction-group">{EMOJIS.slice(0,3).map(emoji=><button key={emoji} className="reaction-button" onClick={()=>reactTo(post.id,emoji)} title={`React ${emoji}`}><span>{emoji}</span><b>{post.reactions?.[emoji]||0}</b></button>)}</div><button className={`comment-action ${commentOpen===post.id?'is-open':''}`} onClick={()=>setCommentOpen(commentOpen===post.id?null:post.id)}><MessageCircle size={16}/><span>{post.comments?.length||0} replies</span></button><button className="share-action" onClick={()=>setExpanded(!expanded)}><Bookmark size={16}/></button></div>{expanded&&<div className="inline-detail"><span>Share this feeling with kindness.</span><button onClick={()=>navigator.clipboard?.writeText(post.body).then(()=>{})}>Copy text</button></div>}
-    {commentOpen===post.id&&<div className="comments-panel">{(post.comments||[]).map(c=><div className="comment-row" key={c.id}><span className="comment-avatar">{c.author.slice(0,1).toUpperCase()}</span><div><b>@{c.author}</b><p>{c.body}</p></div></div>)}<div className="comment-input-row"><input value={commentDraft} onChange={e=>setCommentDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addComment(post.id)} placeholder="Leave a kind reply…"/><button onClick={()=>addComment(post.id)} aria-label="Send reply"><Send size={15}/></button></div><small className="muted">Please be thoughtful. Replies use your anonymous handle.</small></div>}
+  const postComments=post.comments||[];
+  const avatarFallback=['🌿','🌱','🍃','☘️','🪴'][((post.author||'w').length)%5];
+  return <article className="post-card">
+    <div className="post-top">
+      <button className="post-avatar profile-link-button" onClick={()=>openPublicProfile?.(post.author_id,post.author)} aria-label={`Open @${post.author}'s profile`}>
+        {post.avatar_url?<img src={post.avatar_url} alt=""/>:avatarFallback}
+      </button>
+      <div className="post-byline"><button className="profile-name-link" onClick={()=>openPublicProfile?.(post.author_id,post.author)}>@{post.author}</button><span>{post.topic} <i/> {timeAgo(post.created_at)}</span></div>
+      <button className="post-more" aria-label="Report post" onClick={()=>setReportTarget(post)}><Flag size={16}/></button>
+    </div>
+    <p className="post-body">{post.body}</p>
+    <div className="post-tags"><span className="topic-pill"><span/> {post.topic}</span>{post.visibility==='private'&&<span className="private-pill"><LockKeyhole size={12}/> Private</span>}</div>
+    <div className="post-actions">
+      <button className={`reaction-button like-button ${post.likedByMe?'liked':''}`} onClick={()=>reactTo(post.id)} aria-label={post.likedByMe?'Unlike post':'Like post'}><Heart size={17} fill={post.likedByMe?'currentColor':'none'}/><b>{post.likeCount ?? countReactions(post)}</b></button>
+      <button className={`comment-action ${commentOpen===post.id?'is-open':''}`} onClick={()=>setCommentOpen(commentOpen===post.id?null:post.id)}><MessageCircle size={16}/><span>{postComments.length} comments</span></button>
+      <button className="share-action" onClick={()=>setExpanded(!expanded)} aria-label="Share post"><Bookmark size={16}/></button>
+    </div>
+    {expanded&&<div className="inline-detail"><span>Share this feeling with kindness.</span><button onClick={()=>navigator.clipboard?.writeText(post.body).then(()=>{})}>Copy text</button></div>}
+    {commentOpen===post.id&&<div className="comments-panel">
+      {postComments.map(c=><div className="comment-row" key={c.id}>
+        <button className="comment-avatar profile-link-button" onClick={()=>openPublicProfile?.(c.author_id,c.author_handle||c.author)} aria-label={`Open ${c.author_handle||c.author}'s profile`}>
+          {c.avatar_url?<img src={c.avatar_url} alt=""/>:initials(c.author_handle||c.author)}
+        </button>
+        <div className="comment-copy"><button className="profile-name-link" onClick={()=>openPublicProfile?.(c.author_id,c.author_handle||c.author)}>@{c.author_handle||c.author||'member'}</button><p>{c.body}</p><small className="muted">{c.created_at?timeAgo(c.created_at):'Just now'}</small></div>
+      </div>)}
+      {postComments.length===0&&<p className="muted">Be the first to leave a thoughtful reply.</p>}
+      <div className="comment-input-row"><input value={commentDraft} onChange={e=>setCommentDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addComment(post.id)} placeholder="Leave a kind reply…"/><button onClick={()=>addComment(post.id)} aria-label="Send reply"><Send size={15}/></button></div>
+      <small className="muted">Your username and profile photo will be shown with your comment.</small>
+    </div>}
   </article>;
 }
 
-function ExplorePage({query,setQuery,setTab,setTopic,joined,visiblePosts,reactTo,setShowComposer}){
-  return <section className="page-section"><div className="page-heading"><span className="eyebrow">FOLLOW YOUR CURIOSITY</span><h1>Explore <em>the whispers.</em></h1><p>Find a story, a feeling, or a community that feels like you.</p></div><div className="explore-search"><Search size={19}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search words, topics, feelings..."/></div><h2 className="section-heading">Browse by topic</h2><div className="topic-grid">{TOPICS.filter(t=>t!=='All topics').map((t,i)=><button key={t} className={`topic-tile tile-${i%4}`} onClick={()=>{setTopic(t);setTab('Home')}}><span className="tile-symbol">{['♡','✳','⌁','☾'][i%4]}</span><b>{t}</b><span>Explore stories <span>↗</span></span></button>)}</div><div className="section-heading-row"><h2 className="section-heading">Stories you might relate to</h2><button className="text-link" onClick={()=>{setTopic('All topics');setTab('Home')}}>View feed ↗</button></div><div className="post-list">{visiblePosts.slice(0,3).map(p=><PostCard key={p.id} post={p} reactTo={reactTo} commentOpen={null} setCommentOpen={()=>{}} commentDraft="" setCommentDraft={()=>{}} addComment={()=>{}} setReportTarget={()=>{}}/>)}</div><button className="button-primary" onClick={()=>setShowComposer(true)}><Plus size={16}/> Add your voice</button></section>;
+function ExplorePage({query,setQuery,setTab,setTopic,joined,visiblePosts,reactTo,setShowComposer,openPublicProfile}){
+  return <section className="page-section"><div className="page-heading"><span className="eyebrow">FOLLOW YOUR CURIOSITY</span><h1>Explore <em>the whispers.</em></h1><p>Find a story, a feeling, or a community that feels like you.</p></div><div className="explore-search"><Search size={19}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search words, topics, feelings..."/></div><h2 className="section-heading">Browse by topic</h2><div className="topic-grid">{TOPICS.filter(t=>t!=='All topics').map((t,i)=><button key={t} className={`topic-tile tile-${i%4}`} onClick={()=>{setTopic(t);setTab('Home')}}><span className="tile-symbol">{['♡','✳','⌁','☾'][i%4]}</span><b>{t}</b><span>Explore stories <span>↗</span></span></button>)}</div><div className="section-heading-row"><h2 className="section-heading">Stories you might relate to</h2><button className="text-link" onClick={()=>{setTopic('All topics');setTab('Home')}}>View feed ↗</button></div><div className="post-list">{visiblePosts.slice(0,3).map(p=><PostCard key={p.id} post={p} reactTo={reactTo} commentOpen={null} setCommentOpen={()=>{}} commentDraft="" setCommentDraft={()=>{}} addComment={()=>{}} setReportTarget={()=>{}} openPublicProfile={openPublicProfile}/>)}</div><button className="button-primary" onClick={()=>setShowComposer(true)}><Plus size={16}/> Add your voice</button></section>;
 }
 
 function CommunitiesPage({joined,toggleJoin,setTab,setTopic,notify}){
@@ -245,12 +430,33 @@ function CommunitiesPage({joined,toggleJoin,setTab,setTopic,notify}){
   return <section className="page-section"><div className="page-heading"><span className="eyebrow">BETTER, TOGETHER</span><h1>Find your <em>people.</em></h1><p>Little corners for shared experiences, honest stories, and the comfort of being understood.</p></div><div className="explore-search"><Search size={19}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find a community..."/></div><div className="community-grid">{filtered.map((c,i)=><article className="community-card" key={c.name}><div className={`community-cover cover-${c.color}`}><span>{c.icon}</span><div className="cover-leaf"><Sprout size={36}/></div><span className="community-count"><Users size={13}/>{c.members}</span></div><div className="community-card-body"><h3>{c.name}</h3><p>{c.description}</p><div className="community-card-foot"><span><Users size={14}/>{c.members} members</span><button className={joined.includes(c.name)?'join-button joined':'join-button'} onClick={()=>{toggleJoin(c.name);notify(joined.includes(c.name)?`Left ${c.name}`:`Joined ${c.name}`)}}>{joined.includes(c.name)?<><Check size={14}/> Joined</>:<><Plus size={14}/> Join</>}</button></div><button className="community-view" onClick={()=>{setTopic(c.name);setTab('Home')}}>View whispers <span>↗</span></button></div></article>)}</div>{filtered.length===0&&<div className="empty-state"><h3>No communities found</h3><p>Try another name or topic.</p></div>}</section>;
 }
 
-function ProfilePage({profile,setProfile,settings,setSettings,posts,profileEdit,setProfileEdit,editHandle,setEditHandle,editBio,setEditBio,saveProfile,session,signOut,setAuthOpen,setAuthMode,notify}){
-  const ownPosts=posts.filter(p=>p.author===profile.handle);
-  return <section className="page-section profile-page"><div className="profile-cover"><div className="profile-cover-art"><Sprout size={74}/></div><span className="profile-cover-label"><ShieldCheck size={14}/> YOUR SPACE, YOUR RULES</span></div><div className="profile-main"><div className="profile-avatar-large">{profile.avatar}</div><div className="profile-heading-row"><div><h1>@{profile.handle}</h1><p>{profile.bio||'A quiet soul finding their words.'}</p><span className="profile-meta"><span><Leaf size={14}/>{ownPosts.length} confessions</span><span><LockKeyhole size={14}/>{settings.privateAccount?'Private account':'Public account'}</span></span></div><button className="button-secondary" onClick={()=>{setEditHandle(profile.handle);setEditBio(profile.bio);setProfileEdit(!profileEdit)}}><Settings2 size={15}/> Edit profile</button></div>
-    {profileEdit&&<div className="settings-panel"><div className="field-group"><label className="field-label">Anonymous handle</label><input className="text-input" value={editHandle} onChange={e=>setEditHandle(e.target.value)} maxLength={22}/></div><div className="field-group"><label className="field-label">Bio</label><textarea rows={2} maxLength={120} value={editBio} onChange={e=>setEditBio(e.target.value)}/></div><button className="button-primary" onClick={saveProfile}>Save profile</button></div>}
-    <div className="settings-panel"><div className="settings-title"><Settings2 size={18}/><div><h3>Privacy & account</h3><p>Choose how visible you want to be.</p></div></div><div className="setting-row"><span className="setting-icon"><LockKeyhole size={17}/></span><span className="setting-copy"><b>Private account</b><small>Only you can see your private posts. Public confessions remain public.</small></span><button className={`switch ${settings.privateAccount?'on':''}`} role="switch" aria-checked={settings.privateAccount} onClick={()=>setSettings(s=>({...s,privateAccount:!s.privateAccount}))}><span/></button></div><div className="setting-row"><span className="setting-icon"><MessageCircle size={17}/></span><span className="setting-copy"><b>Anonymous replies</b><small>Use your anonymous handle when replying.</small></span><button className={`switch ${settings.anonymousReplies?'on':''}`} role="switch" aria-checked={settings.anonymousReplies} onClick={()=>setSettings(s=>({...s,anonymousReplies:!s.anonymousReplies}))}><span/></button></div><div className="setting-row"><span className="setting-icon"><ShieldCheck size={17}/></span><span className="setting-copy"><b>Anonymous identity</b><small>Your public handle is separate from your email address.</small></span><span className="verified-pill"><Check size={13}/> Active</span></div><div className="account-actions">{session?<button className="button-secondary" onClick={signOut}><LogOut size={15}/> Sign out</button>:<button className="button-primary" onClick={()=>{setAuthMode('signup');setAuthOpen(true)}}><LogIn size={15}/> Create account</button>}<button className="danger-link" onClick={()=>notify('To delete a cloud account, add an authenticated account-deletion Edge Function before launch.')}>Account deletion info</button></div></div>
-    <div className="profile-posts-head"><h2>Your confessions</h2><span>{ownPosts.length}</span></div>{ownPosts.length?ownPosts.map(p=><article className="post-card" key={p.id}><span className="topic-pill"><span/>{p.topic}</span><p className="post-body">{p.body}</p><small className="muted">{timeAgo(p.created_at)} · {p.visibility==='private'?'Private':'Public'}</small></article>):<div className="empty-state compact"><Sprout size={30}/><h3>Your story starts here.</h3><p>Your confessions will appear here. Only share what feels comfortable.</p></div>}
-  </div></section>;
+function ProfilePage({profile,setProfile,settings,setSettings,posts,profileEdit,setProfileEdit,editHandle,setEditHandle,editBio,setEditBio,saveProfile,session,signOut,setAuthOpen,setAuthMode,notify,coverFileRef,avatarFileRef,uploadProfileImage,coverUploading,avatarUploading}){
+  const ownPosts=posts.filter(p=>session?.user?.id ? p.author_id===session.user.id : p.author===profile.handle);
+  return <section className="page-section profile-page">
+    <div className="profile-cover profile-cover-photo" style={profile.cover_photo_url?{backgroundImage:`linear-gradient(180deg,rgba(30,20,45,.02),rgba(30,20,45,.6)),url("${profile.cover_photo_url}")`}:undefined}>
+      {!profile.cover_photo_url&&<div className="profile-cover-art"><Sprout size={74}/></div>}
+      <span className="profile-cover-label"><ShieldCheck size={14}/> YOUR SPACE, YOUR RULES</span>
+      {session&&<button className="cover-edit-button" onClick={()=>coverFileRef.current?.click()}><ImagePlus size={15}/>{coverUploading?'Uploading…':'Add cover photo'}</button>}
+      <input ref={coverFileRef} type="file" accept="image/*" hidden onChange={e=>{uploadProfileImage(e.target.files?.[0],'cover');e.target.value='';}}/>
+    </div>
+    <div className="profile-main">
+      <div className="profile-avatar-large profile-avatar-photo">{profile.avatar_url?<img src={profile.avatar_url} alt="Profile"/>:profile.avatar}</div>
+      <div className="profile-heading-row"><div><h1>@{profile.handle}</h1><p>{profile.bio||'A quiet soul finding their words.'}</p><span className="profile-meta"><span><Leaf size={14}/>{ownPosts.length} posts</span><span><LockKeyhole size={14}/>{settings.privateAccount?'Private account':'Public account'}</span></span></div><button className="button-secondary" onClick={()=>{setEditHandle(profile.handle);setEditBio(profile.bio);setProfileEdit(!profileEdit)}}><Settings2 size={15}/> Edit profile</button></div>
+      {session&&<div className="profile-photo-actions"><button className="button-secondary" onClick={()=>avatarFileRef.current?.click()}><Camera size={15}/>{avatarUploading?'Uploading…':'Change profile photo'}</button><input ref={avatarFileRef} type="file" accept="image/*" hidden onChange={e=>{uploadProfileImage(e.target.files?.[0],'avatar');e.target.value='';}}/><small className="muted">Profile photo appears beside your comments and posts. Cover photo appears at the top of your profile.</small></div>}
+      {profileEdit&&<div className="settings-panel"><div className="field-group"><label className="field-label">Anonymous handle</label><input className="text-input" value={editHandle} onChange={e=>setEditHandle(e.target.value)} maxLength={22}/></div><div className="field-group"><label className="field-label">Bio</label><textarea rows={2} maxLength={120} value={editBio} onChange={e=>setEditBio(e.target.value)}/></div><button className="button-primary" onClick={saveProfile}>Save profile</button></div>}
+      <div className="settings-panel"><div className="settings-title"><Settings2 size={18}/><div><h3>Privacy & account</h3><p>Choose how visible you want to be.</p></div></div><div className="setting-row"><span className="setting-icon"><LockKeyhole size={17}/></span><span className="setting-copy"><b>Private account</b><small>Private notes stay private; public confessions remain public.</small></span><button className={`switch ${settings.privateAccount?'on':''}`} role="switch" aria-checked={settings.privateAccount} onClick={async()=>{const next=!settings.privateAccount;setSettings(s=>({...s,privateAccount:next}));if(cloudEnabled&&session?.user?.id){const {error}=await supabase.from('profiles').upsert({id:session.user.id,handle:profile.handle,bio:profile.bio,is_private:next,avatar_url:profile.avatar_url||null,cover_photo_url:profile.cover_photo_url||null},{onConflict:'id'});if(error)notify(error.message);}}}><span/></button></div><div className="setting-row"><span className="setting-icon"><MessageCircle size={17}/></span><span className="setting-copy"><b>Anonymous replies</b><small>Replies display your chosen Whisper handle.</small></span><button className={`switch ${settings.anonymousReplies?'on':''}`} role="switch" aria-checked={settings.anonymousReplies} onClick={()=>setSettings(s=>({...s,anonymousReplies:!s.anonymousReplies}))}><span/></button></div><div className="setting-row"><span className="setting-icon"><ShieldCheck size={17}/></span><span className="setting-copy"><b>Anonymous identity</b><small>Your public handle is separate from your email address.</small></span><span className="verified-pill"><Check size={13}/> Active</span></div><div className="account-actions">{session?<button className="button-secondary" onClick={signOut}><LogOut size={15}/> Sign out</button>:<button className="button-primary" onClick={()=>{setAuthMode('signup');setAuthOpen(true)}}><LogIn size={15}/> Create account</button>}<button className="danger-link" onClick={()=>notify('To delete a cloud account, add an authenticated account-deletion Edge Function before launch.')}>Account deletion info</button></div></div>
+      <div className="profile-posts-head"><h2>Your posts</h2><span>{ownPosts.length}</span></div>{ownPosts.length?ownPosts.map(p=><article className="post-card" key={p.id}><span className="topic-pill"><span/>{p.topic}</span><p className="post-body">{p.body}</p><small className="muted">{timeAgo(p.created_at)} · {p.visibility==='private'?'Private':'Public'}</small></article>):<div className="empty-state compact"><Sprout size={30}/><h3>Your story starts here.</h3><p>Your confessions will appear here. Only share what feels comfortable.</p></div>}
+    </div>
+  </section>;
 }
+
+function PublicProfilePage({user,posts,onBack}){
+  const userPosts=posts.filter(p=>p.author_id===user.id&&p.visibility==='public');
+  return <section className="page-section profile-page public-profile-page">
+    <button className="button-secondary" onClick={onBack}><ArrowLeft size={15}/> Back to feed</button>
+    <div className="profile-cover profile-cover-photo" style={user.cover_photo_url?{backgroundImage:`linear-gradient(180deg,rgba(30,20,45,.02),rgba(30,20,45,.6)),url("${user.cover_photo_url}")`}:undefined}>{!user.cover_photo_url&&<div className="profile-cover-art"><Sprout size={74}/></div>}<span className="profile-cover-label"><ShieldCheck size={14}/> THEIR SPACE, THEIR RULES</span></div>
+    <div className="profile-main"><div className="profile-avatar-large profile-avatar-photo">{user.avatar_url?<img src={user.avatar_url} alt="Profile"/>:<span>{initials(user.handle)}</span>}</div><div className="profile-heading-row"><div><h1>@{user.handle}</h1><p>{user.bio||'A quiet soul finding their words.'}</p><span className="profile-meta"><span><Leaf size={14}/>{userPosts.length} public posts</span></span></div></div><div className="profile-posts-head"><h2>Public posts</h2><span>{userPosts.length}</span></div>{userPosts.length?userPosts.map(p=><article className="post-card" key={p.id}><span className="topic-pill"><span/>{p.topic}</span><p className="post-body">{p.body}</p><small className="muted">{timeAgo(p.created_at)}</small></article>):<div className="empty-state compact"><Sprout size={30}/><h3>No public posts yet</h3><p>When this person shares public confessions, they will appear here.</p></div>}</div>
+  </section>;
+}
+
 export default App;

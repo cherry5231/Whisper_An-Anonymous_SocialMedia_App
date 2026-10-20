@@ -6,244 +6,264 @@
 @media(max-width:820px){.sidebar{display:none}.topbar{height:62px;padding:0 17px;gap:12px}.mobile-brand{display:flex;align-items:center;gap:5px;font:800 18px Manrope;letter-spacing:-1px;color:var(--text);white-space:nowrap}.mobile-brand svg,.mobile-brand span{color:var(--green)}.search-wrap{max-width:none}.demo-status{display:none}.content{padding:23px 18px 20px}.home-layout{grid-template-columns:minmax(0,1fr)}.right-rail{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.mood-card{grid-row:span 2}.footer{padding:15px 18px}.welcome-row{min-height:150px}.welcome-art{width:130px}.mobile-nav{position:fixed;bottom:0;left:0;right:0;z-index:10;display:flex;justify-content:space-around;background:var(--surface);border-top:1px solid var(--line);padding:7px 6px calc(7px + env(safe-area-inset-bottom))}.mobile-nav button{border:0;background:transparent;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;padding:5px}.mobile-nav button.selected{color:var(--green)}.mobile-nav small{font-size:9px}.footer{margin-bottom:62px}.toast{bottom:82px}}
 @media(max-width:560px){.topbar{gap:8px;padding:0 11px}.mobile-brand{font-size:16px}.mobile-brand svg{width:18px}.search-wrap{height:35px;padding:0 9px;gap:6px}.search-wrap input{font-size:10px}.search-wrap input::placeholder{font-size:10px}.top-actions{gap:6px}.theme-toggle{width:32px;height:32px}.sign-in-button{padding:8px;font-size:0;gap:0}.sign-in-button svg{width:17px;height:17px}.content{padding:19px 12px}.welcome-row{padding:0 4px 16px;min-height:144px}.welcome-row h1{font-size:34px}.welcome-row p{font-size:10px;max-width:270px}.welcome-art{width:90px;height:110px;margin-left:-5px}.art-leaf{width:64px;height:64px}.art-leaf svg{width:42px}.orbit-one{width:85px;height:64px}.orbit-two{width:75px;height:100px}.spark-one{right:0;top:10px}.spark-two{left:0;bottom:7px}.composer-prompt{padding:10px;gap:8px;margin-bottom:24px}.prompt-copy{font-size:10px}.prompt-cta{padding:8px;font-size:10px}.feed-toolbar{align-items:flex-start;flex-direction:column}.feed-controls{width:100%}.feed-controls select{flex:1;max-width:none}.post-card{padding:13px}.post-body{font-size:12px;margin:14px 0}.reaction-group{gap:4px}.reaction-button{padding:6px;gap:4px}.reaction-button span{font-size:12px}.reaction-button b{font-size:9px}.comment-action{gap:4px;font-size:9px}.comment-action svg{width:14px}.post-actions{gap:4px}.right-rail{grid-template-columns:1fr 1fr}.rail-card{padding:12px}.mood-card h3{font-size:15px}.mood-card p,.kindness-card p{font-size:9px}.rail-community-name b{font-size:9px}.rail-community-name small{font-size:8px}.rail-community{gap:6px}.community-glyph{width:26px;height:26px}.rail-safety{grid-column:1/-1}.footer{font-size:8px;flex-direction:column;align-items:flex-start;gap:7px;padding:13px 12px}.page-heading h1{font-size:32px}.page-heading>p{font-size:11px}.topic-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.topic-tile{min-height:110px}.community-grid{grid-template-columns:1fr;gap:12px}.community-cover{height:90px}.community-card-body>p{height:auto}.profile-main{padding:0 6px}.profile-heading-row{gap:10px}.profile-heading-row h1{font-size:21px}.profile-heading-row .button-secondary{padding:8px;font-size:10px}.profile-heading-row p{max-width:220px;line-height:1.6}.profile-meta{gap:8px}.profile-meta span{font-size:9px}.setting-copy small{max-width:230px}.setting-row{gap:8px}.setting-icon{width:27px;height:27px}.settings-panel{padding:13px}.field-row{flex-direction:column}.modal{padding:19px}.modal h2{font-size:23px}.modal-actions{flex-wrap:wrap}.modal-actions button{flex:1}.textarea-foot{font-size:8px}.auth-modal{padding:20px}.account-actions{gap:7px;flex-wrap:wrap}.profile-cover{height:125px}.profile-cover-art{right:20px}.profile-avatar-large{height:70px;width:70px;margin-top:-32px}}
 
-/* WHISPER VIOLET THEME — violet accents in both themes */
-.app {
-  --bg: #ffffff;
+
+/* ===== Refined purple theme overrides ===== */
+/* Whisper — refined violet theme
+   Append this file after the existing styles.css rules, or use it as the final override section. */
+:root {
+  color-scheme: light;
+  --purple: #6847d9;
+  --purple-strong: #5232b8;
+  --purple-soft: #f0ebff;
+  --bg: #faf9fc;
   --surface: #ffffff;
-  --surface2: #f7f4ff;
-  --text: #211a2e;
-  --muted: #786f88;
-  --line: #e7def5;
-  --green: #7040c8;
-  --green-dark: #6032b5;
-  --mint: #eee6ff;
-  --shadow: 0 8px 28px rgba(67, 36, 115, .07);
+  --surface2: #f6f4f9;
+  --text: #292536;
+  --muted: #777184;
+  --line: #e8e4ef;
+  --shadow: 0 2px 8px rgba(38, 25, 67, 0.035);
+}
+
+.app {
+  --bg: #faf9fc;
+  --surface: #fff;
+  --surface2: #f6f4f9;
+  --text: #292536;
+  --muted: #777184;
+  --line: #e8e4ef;
+  --green: #6847d9;
+  --green-dark: #5232b8;
+  --mint: #f0ebff;
+  --shadow: 0 2px 8px rgba(38, 25, 67, 0.035);
   background: var(--bg);
   color: var(--text);
 }
 
-/* LIGHT MODE: clean white surfaces with soft violet accents */
-.app:not(.dark),
-.app:not(.dark) .sidebar,
-.app:not(.dark) .topbar,
-.app:not(.dark) .main-area,
-.app:not(.dark) .mobile-nav {
-  background: #ffffff;
-}
-.app:not(.dark) .post-card,
-.app:not(.dark) .rail-card,
-.app:not(.dark) .community-card,
-.app:not(.dark) .topic-tile,
-.app:not(.dark) .settings-panel,
-.app:not(.dark) .composer-prompt,
-.app:not(.dark) .comments-panel,
-.app:not(.dark) .modal,
-.app:not(.dark) .empty-state {
-  background: #ffffff;
-  border-color: #e7def5;
-}
-.app:not(.dark) .search-wrap,
-.app:not(.dark) .feed-controls select,
-.app:not(.dark) .field-group select,
-.app:not(.dark) .filter-button,
-.app:not(.dark) .icon-button,
-.app:not(.dark) .sign-in-button,
-.app:not(.dark) .text-input,
-.app:not(.dark) .modal textarea,
-.app:not(.dark) .settings-panel textarea,
-.app:not(.dark) .reaction-button {
-  background: #faf8ff;
-  border-color: #e2d7f4;
-  color: #211a2e;
-}
-.app:not(.dark) .compose-side,
-.app:not(.dark) .button-primary,
-.app:not(.dark) .join-button {
-  background: #7040c8;
-  border-color: #7040c8;
-  color: #ffffff;
-}
-.app:not(.dark) .nav-item.active,
-.app:not(.dark) .prompt-cta,
-.app:not(.dark) .topic-pill,
-.app:not(.dark) .private-pill,
-.app:not(.dark) .setting-icon,
-.app:not(.dark) .verified-pill,
-.app:not(.dark) .gentle-reminder,
-.app:not(.dark) .avatar,
-.app:not(.dark) .post-avatar,
-.app:not(.dark) .prompt-avatar,
-.app:not(.dark) .community-glyph,
-.app:not(.dark) .auth-logo {
-  background: #eee6ff;
-  color: #6032b5;
-}
-.app:not(.dark) .brand-mark {
-  background: #7040c8;
-  color: #ffffff;
-}
-.app:not(.dark) .brand-dot,
-.app:not(.dark) .welcome-row h1 em,
-.app:not(.dark) .page-heading h1 em,
-.app:not(.dark) .mobile-brand svg,
-.app:not(.dark) .mobile-brand span,
-.app:not(.dark) .eyebrow,
-.app:not(.dark) .privacy-note,
-.app:not(.dark) .empty-state > svg,
-.app:not(.dark) .auth-switch button,
-.app:not(.dark) .settings-title,
-.app:not(.dark) .auth-logo,
-.app:not(.dark) .comment-action.is-open {
-  color: #7040c8;
-}
-.app:not(.dark) .art-leaf {
-  background: linear-gradient(140deg, #eee6ff, #d9c8ff);
-  color: #7040c8;
-}
-.app:not(.dark) .art-orbit { border-color: #a78bfa66; }
-.app:not(.dark) .art-spark { color: #8b5cf6; }
-.app:not(.dark) .topic-pill > span,
-.app:not(.dark) .tiny-dot,
-.app:not(.dark) .live-dot,
-.app:not(.dark) .demo-status span { background-color: #8b5cf6; }
-.app:not(.dark) .nav-item:hover,
-.app:not(.dark) .side-communities button:hover,
-.app:not(.dark) .reaction-button:hover {
-  background: #f0e9ff;
-  border-color: #c4b5fd;
-}
-.app:not(.dark) button:focus-visible,
-.app:not(.dark) input:focus-visible,
-.app:not(.dark) textarea:focus-visible,
-.app:not(.dark) select:focus-visible { outline-color: #8b5cf6; }
-.app:not(.dark) .toast {
-  background: #6032b5;
-  border-color: #8b5cf6;
-  color: #ffffff;
-}
-.app:not(.dark) .toast-check { background: #8b5cf6; }
-.app:not(.dark) .switch.on { background: #7040c8; }
-.app:not(.dark) .radio-row input { accent-color: #7040c8; }
-.app:not(.dark) .profile-cover {
-  background: linear-gradient(120deg, #e6dcff, #f7f3ff 55%, #d8c8ff);
-}
-.app:not(.dark) .profile-cover-art { color: #8b5cf6; }
-.app:not(.dark) .profile-cover-label { color: #6032b5; }
-.app:not(.dark) .cover-lilac { background: #eee6ff; color: #7040c8; }
-
-/* DARK MODE: black canvas, deep violet cards, bright violet controls */
 .app.dark {
-  --bg: #000000;
-  --surface: #08070b;
-  --surface2: #100c17;
-  --text: #f4efff;
-  --muted: #a79bb8;
-  --line: #2b2039;
-  --green: #b99aff;
-  --green-dark: #7c3aed;
-  --mint: #211333;
-  --shadow: 0 8px 28px rgba(0, 0, 0, .35);
-  background: #000000;
-  color: var(--text);
+  color-scheme: dark;
+  --bg: #121116;
+  --surface: #1b1921;
+  --surface2: #24212c;
+  --text: #f0edf6;
+  --muted: #aaa3b7;
+  --line: #393342;
+  --green: #b8a4ff;
+  --green-dark: #9577ff;
+  --mint: #302744;
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
 }
-.app.dark,
-.app.dark .sidebar,
-.app.dark .topbar,
-.app.dark .main-area,
-.app.dark .mobile-nav { background: #000000; }
-.app.dark .post-card,
-.app.dark .rail-card,
-.app.dark .community-card,
-.app.dark .topic-tile,
-.app.dark .settings-panel,
-.app.dark .composer-prompt,
-.app.dark .comments-panel,
-.app.dark .modal,
-.app.dark .empty-state {
-  background: #0d0913;
-  border-color: #38264e;
+
+/* A calmer, more editorial visual language: restrained borders and less decoration. */
+body,
+.app,
+button,
+input,
+textarea,
+select {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-.app.dark .search-wrap,
-.app.dark .feed-controls select,
-.app.dark .field-group select,
-.app.dark .filter-button,
-.app.dark .icon-button,
-.app.dark .sign-in-button,
-.app.dark .text-input,
-.app.dark .modal textarea,
-.app.dark .settings-panel textarea,
-.app.dark .reaction-button {
-  background: #08060b;
-  border-color: #38264e;
-  color: #f4efff;
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--green, #6847d9);
+  outline-offset: 2px;
 }
-.app.dark .nav-item.active,
-.app.dark .prompt-cta,
-.app.dark .topic-pill,
-.app.dark .private-pill,
-.app.dark .setting-icon,
-.app.dark .verified-pill,
-.app.dark .gentle-reminder,
-.app.dark .avatar,
-.app.dark .post-avatar,
-.app.dark .prompt-avatar,
-.app.dark .community-glyph,
-.app.dark .auth-logo {
-  background: #211333;
-  color: #c4a7ff;
+
+.sidebar {
+  border-right-color: var(--line);
 }
-.app.dark .compose-side,
-.app.dark .button-primary,
-.app.dark .join-button,
-.app.dark .brand-mark {
-  background: #7c3aed;
-  border-color: #a78bfa;
-  color: #ffffff;
+
+.brand {
+  font-size: 23px;
+  letter-spacing: -0.8px;
 }
-.app.dark .welcome-row h1 em,
-.app.dark .page-heading h1 em,
-.app.dark .mobile-brand svg,
-.app.dark .mobile-brand span,
-.app.dark .eyebrow,
-.app.dark .privacy-note,
-.app.dark .empty-state > svg,
-.app.dark .auth-switch button,
-.app.dark .settings-title,
-.app.dark .auth-logo,
-.app.dark .comment-action.is-open {
-  color: #b99aff;
+
+.brand-mark {
+  background: var(--green-dark);
+  border-radius: 10px;
 }
-.app.dark .art-leaf { background: #211333; color: #c4a7ff; }
-.app.dark .art-orbit { border-color: #a78bfa55; }
-.app.dark .art-spark { color: #a78bfa; }
-.app.dark .topic-pill > span,
-.app.dark .tiny-dot,
-.app.dark .live-dot,
-.app.dark .demo-status span { background-color: #a78bfa; }
-.app.dark .post-actions,
-.app.dark .setting-row,
-.app.dark .account-actions { border-color: #38264e; }
-.app.dark .nav-item:hover,
-.app.dark .side-communities button:hover,
-.app.dark .reaction-button:hover {
-  background: #211333;
-  border-color: #6d28d9;
+
+.brand-dot,
+.mobile-brand svg,
+.mobile-brand span {
+  color: var(--green);
 }
-.app.dark button:focus-visible,
-.app.dark input:focus-visible,
-.app.dark textarea:focus-visible,
-.app.dark select:focus-visible { outline-color: #a78bfa; }
-.app.dark .toast {
-  background: #211333;
-  border-color: #6d28d9;
-  color: #f3eefb;
+
+.compose-side {
+  background: var(--green-dark);
+  box-shadow: none;
+  border-radius: 9px;
 }
-.app.dark .toast-check { background: #7c3aed; }
-.app.dark .switch.on { background: #7c3aed; }
-.app.dark .radio-row input { accent-color: #a78bfa; }
-.app.dark .profile-cover {
-  background: linear-gradient(120deg, #241436, #130d1c 55%, #32204a);
+
+.nav-item,
+.side-communities button,
+.icon-button,
+.sign-in-button,
+.filter-button,
+.feed-controls select {
+  border-radius: 8px;
 }
-.app.dark .profile-cover-art { color: #a78bfa; }
-.app.dark .profile-cover-label { background: #211333cc; color: #c4a7ff; }
-.app.dark .cover-lilac { background: #211333; color: #c4a7ff; }
+
+.nav-item.active {
+  background: var(--mint);
+  color: var(--green);
+}
+
+.privacy-note {
+  border-radius: 9px;
+}
+
+.content {
+  padding-top: 28px;
+}
+
+.welcome-row {
+  min-height: 150px;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
+.welcome-row h1,
+.page-heading h1 {
+  font-weight: 750;
+  letter-spacing: -1.25px;
+}
+
+.eyebrow {
+  letter-spacing: 1.2px;
+  font-size: 10px;
+}
+
+.welcome-art {
+  opacity: 0.72;
+  transform: scale(0.88);
+}
+
+.composer-prompt,
+.post-card,
+.rail-card,
+.topic-tile,
+.community-card,
+.settings-panel,
+.modal {
+  box-shadow: none;
+  border-color: var(--line);
+}
+
+.composer-prompt,
+.post-card,
+.rail-card,
+.topic-tile,
+.community-card,
+.settings-panel {
+  border-radius: 10px;
+}
+
+.composer-prompt {
+  margin-bottom: 26px;
+}
+
+.prompt-cta {
+  background: var(--mint);
+  color: var(--green-dark);
+  border-radius: 7px;
+}
+
+.post-list {
+  gap: 12px;
+}
+
+.post-card {
+  padding: 18px 19px;
+}
+
+.post-avatar,
+.prompt-avatar,
+.avatar {
+  background: var(--mint);
+}
+
+.post-body {
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.topic-pill,
+.private-pill,
+.verified-pill {
+  border-radius: 5px;
+  font-size: 10px;
+}
+
+.reaction-button {
+  background: transparent;
+  border-radius: 7px;
+}
+
+.reaction-button:hover {
+  border-color: var(--green);
+  background: var(--mint);
+}
+
+.button-primary {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+  border-radius: 8px;
+  color: #fff;
+  box-shadow: none;
+}
+
+.app.dark .button-primary {
+  color: #17131f;
+}
+
+.button-secondary {
+  border-radius: 8px;
+}
+
+.text-input,
+.modal textarea,
+.settings-panel textarea,
+.field-group select {
+  border-radius: 8px;
+}
+
+.modal {
+  border-radius: 12px;
+  box-shadow: 0 18px 60px rgba(16, 11, 26, 0.16);
+}
+
+.toast {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+  border-radius: 9px;
+  box-shadow: 0 6px 22px rgba(16, 11, 26, 0.14);
+}
+
+.empty-state {
+  border-radius: 10px;
+}
+
+@media (max-width: 560px) {
+  .post-card {
+    padding: 14px;
+  }
+
+  .welcome-row h1 {
+    letter-spacing: -1px;
+  }
+}
+.post-avatar {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface, #edf3e9);
+  font-size: 23px;
+}
